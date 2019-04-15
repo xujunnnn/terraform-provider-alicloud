@@ -57,8 +57,8 @@ const (
 	SlbAclEntryEmpty                    = "AclEntryEmpty"
 	SlbAclNameExist                     = "AclNameExist"
 	SlbTokenIsProcessing                = "OperationFailed.TokenIsProcessing"
-
-	SlbCACertificateIdNotFound = "CACertificateId.NotFound"
+	SlbCommodityCodeNotExists           = "CommodityCodeNotExists"
+	SlbCACertificateIdNotFound          = "CACertificateId.NotFound"
 	// slb server certificate
 	SlbServerCertificateIdNotFound = "ServerCertificateId.NotFound"
 
