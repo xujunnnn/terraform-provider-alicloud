@@ -142,6 +142,27 @@ func (s *SlbService) DescribeLoadBalancerListenerAttribute(loadBalancerId string
 
 }
 
+func (s *SlbService) DescribeDomainExtensionAttribute(loadBalancerId string, port int, domainExtensionId string) (*slb.DescribeDomainExtensionsResponse, error) {
+	req := slb.CreateDescribeDomainExtensionsRequest()
+	req.LoadBalancerId = loadBalancerId
+	req.DomainExtensionId = domainExtensionId
+	req.ListenerPort = requests.NewInteger(port)
+	raw, err := s.client.WithSlbClient(func(slbClient *slb.Client) (interface{}, error) {
+		return slbClient.DescribeDomainExtensions(req)
+	})
+	if err != nil {
+		if IsExceptedErrors(err, []string{VServerGroupNotFoundMessage, InvalidParameter}) {
+			return nil, GetNotFoundErrorFromString(GetNotFoundMessage("SLB DomainExtension", domainExtensionId))
+		}
+		return nil, fmt.Errorf("DescribeSlbDomainExtension got an error: %#v", err)
+	}
+	resp, _ := raw.(*slb.DescribeDomainExtensionsResponse)
+	if resp == nil {
+		return nil, GetNotFoundErrorFromString(GetNotFoundMessage("SLB DomainExtension", domainExtensionId))
+	}
+	return resp, err
+}
+
 func (s *SlbService) WaitForLoadBalancer(loadBalancerId string, status Status, timeout int) error {
 	if timeout <= 0 {
 		timeout = DefaultTimeout
