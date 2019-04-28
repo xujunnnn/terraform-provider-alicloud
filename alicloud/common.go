@@ -51,6 +51,8 @@ type NetworkType string
 const (
 	Classic = NetworkType("Classic")
 	Vpc     = NetworkType("Vpc")
+	ClassicInternet = NetworkType("classic_internet")
+    ClassicIntranet = NetworkType("classic_intranet")
 )
 
 type TimeType string
@@ -61,6 +63,13 @@ const (
 	Week  = TimeType("Week")
 	Month = TimeType("Month")
 	Year  = TimeType("Year")
+)
+
+type IpVersion string
+
+const (
+	IPV4 = IpVersion("ipv4")
+	IPV6 = IpVersion("ipv6")
 )
 
 type Status string
