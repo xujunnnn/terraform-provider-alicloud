@@ -307,7 +307,7 @@ const testAccCheckAlicloudZonesDataSource_slb = `
 data "alicloud_zones" "default" {
   available_resource_creation= "Slb"
   enable_details = true
-  available_slb_address_ip_version= "ipv6"
+  available_slb_address_ip_version= "ipv4"
   available_slb_address_type="Vpc"
 }`
 

@@ -46,7 +46,7 @@ func dataSourceAlicloudZones() *schema.Resource {
 				}),
 			},
 			"available_slb_address_type": {
-				Type: schema.TypeString,
+				Type:     schema.TypeString,
 				Optional: true,
 				ForceNew: true,
 				ValidateFunc: validateAllowedStringValue([]string{
@@ -55,8 +55,8 @@ func dataSourceAlicloudZones() *schema.Resource {
 					string(ClassicInternet),
 				}),
 			},
-			"available_slb_address_ip_version":{
-				Type: schema.TypeString,
+			"available_slb_address_ip_version": {
+				Type:     schema.TypeString,
 				Optional: true,
 				ForceNew: true,
 				ValidateFunc: validateAllowedStringValue([]string{
@@ -70,6 +70,7 @@ func dataSourceAlicloudZones() *schema.Resource {
 				ForceNew:     true,
 				ValidateFunc: validateDiskCategory,
 			},
+
 			"multi": {
 				Type:     schema.TypeBool,
 				Optional: true,
@@ -292,18 +293,14 @@ func dataSourceAlicloudZonesRead(d *schema.ResourceData, meta interface{}) error
 		}
 		addDebug(request.GetActionName(), raw)
 		response, _ := raw.(*slb.DescribeAvailableResourceResponse)
-		fmt.Println("response.........")
-		fmt.Println(response)
 		for _, resource := range response.AvailableResources.AvailableResource {
 			slaveIds := slaveZones[resource.MasterZoneId]
-			slaveIds = append(slaveIds,resource.SlaveZoneId)
+			slaveIds = append(slaveIds, resource.SlaveZoneId)
 			if len(slaveIds) > 0 {
 				sort.Strings(slaveIds)
 			}
 			slaveZones[resource.MasterZoneId] = slaveIds
 		}
-		fmt.Println("slaveZones........")
-		fmt.Println(slaveZones)
 	}
 
 	_, validZones, err := ecsService.DescribeAvailableResources(d, meta, ZoneResource)
@@ -408,8 +405,7 @@ func dataSourceAlicloudZonesRead(d *schema.ResourceData, meta interface{}) error
 	if err := d.Set("ids", zoneIds); err != nil {
 		return err
 	}
-	fmt.Println("available zones ...........")
-	fmt.Println(s)
+
 	// create a json file in current directory and write data source to it.
 	if output, ok := d.GetOk("output_file"); ok && output.(string) != "" {
 		writeToFile(output.(string), s)

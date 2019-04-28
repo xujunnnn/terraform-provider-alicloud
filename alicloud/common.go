@@ -49,10 +49,10 @@ const (
 type NetworkType string
 
 const (
-	Classic = NetworkType("Classic")
-	Vpc     = NetworkType("Vpc")
+	Classic         = NetworkType("Classic")
+	Vpc             = NetworkType("Vpc")
 	ClassicInternet = NetworkType("classic_internet")
-    ClassicIntranet = NetworkType("classic_intranet")
+	ClassicIntranet = NetworkType("classic_intranet")
 )
 
 type TimeType string
