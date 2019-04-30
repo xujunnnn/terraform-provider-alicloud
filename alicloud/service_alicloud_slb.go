@@ -151,7 +151,7 @@ func (s *SlbService) DescribeDomainExtensionAttribute(loadBalancerId string, por
 		return slbClient.DescribeDomainExtensions(req)
 	})
 	if err != nil {
-		if IsExceptedErrors(err, []string{VServerGroupNotFoundMessage, InvalidParameter}) {
+		if IsExceptedErrors(err, []string{"InvalidLoadBalancerId.NotFound", InvalidParameter}) {
 			return nil, GetNotFoundErrorFromString(GetNotFoundMessage("SLB DomainExtension", domainExtensionId))
 		}
 		return nil, fmt.Errorf("DescribeSlbDomainExtension got an error: %#v", err)

@@ -31,7 +31,7 @@ resource "alicloud_slb" "instance" {
    ssl_certificate_id        = "${alicloud_slb_server_certificate.foo.id}"
  }
 
- resource "alicloud_slb_domain_extension" "example" {
+ resource "alicloud_slb_domain_extension" "example1" {
    load_balancer_id      = "${alicloud_slb.instance.id}"
    frontend_port         = "${alicloud_slb_listener.https.frontend_port}"
    domain                = "www.test.com"

@@ -10,7 +10,7 @@ import (
 	"testing"
 )
 
-func TestAccAlicloudSlbDomainExtension(t *testing.T) {
+func TestAccAlicloudSlbDomainExtensionBasic(t *testing.T) {
 	var domainExtension slb.DescribeDomainExtensionsResponse
 	resource.Test(t, resource.TestCase{
 		PreCheck: func() {
@@ -18,18 +18,18 @@ func TestAccAlicloudSlbDomainExtension(t *testing.T) {
 		},
 
 		// module name
-		IDRefreshName: "alicloud_slb_domain_extension.example",
+		IDRefreshName: "alicloud_slb_domain_extension.example1",
 		Providers:     testAccProviders,
 		CheckDestroy:  testAccCheckSlbDomainExtensionDestroy,
 		Steps: []resource.TestStep{
 			{
 				Config: testAccSlbDomainExtensionBasic,
 				Check: resource.ComposeTestCheckFunc(
-					testAccCheckSlbDomainExtensionExists("alicloud_slb_domain_extension.example", &domainExtension),
-					resource.TestCheckResourceAttrSet("alicloud_slb_domain_extension.example", "load_balancer_id"),
-					resource.TestCheckResourceAttrSet("alicloud_slb_domain_extension.example", "frontend_port"),
-					resource.TestCheckResourceAttr("alicloud_slb_domain_extension.example", "domain", "www.test.com"),
-					resource.TestCheckResourceAttrSet("alicloud_slb_domain_extension.example", "server_certificate_id"),
+					testAccCheckSlbDomainExtensionExists("alicloud_slb_domain_extension.example1", &domainExtension),
+					resource.TestCheckResourceAttrSet("alicloud_slb_domain_extension.example1", "load_balancer_id"),
+					resource.TestCheckResourceAttrSet("alicloud_slb_domain_extension.example1", "frontend_port"),
+					resource.TestCheckResourceAttr("alicloud_slb_domain_extension.example1", "domain", "www.test.com"),
+					resource.TestCheckResourceAttrSet("alicloud_slb_domain_extension.example1", "server_certificate_id"),
 				),
 			},
 		},
@@ -47,18 +47,17 @@ func testAccCheckSlbDomainExtensionExists(n string, domain *slb.DescribeDomainEx
 			return fmt.Errorf("No SLB Rule ID is set")
 		}
 		loadBalancerId := ds.Primary.Attributes["load_balancer_id"]
-		port,err := strconv.Atoi(ds.Primary.Attributes["frontend_port"])
+		port, err := strconv.Atoi(ds.Primary.Attributes["frontend_port"])
 		if err != nil {
 			return err
 		}
 		client := testAccProvider.Meta().(*connectivity.AliyunClient)
 		slbService := SlbService{client}
-		domainExtension, err := slbService.DescribeDomainExtensionAttribute(loadBalancerId,port,ds.Primary.ID)
+		domainExtension, err := slbService.DescribeDomainExtensionAttribute(loadBalancerId, port, ds.Primary.ID)
 		if err != nil {
 			return err
 		}
 		domain = domainExtension
-
 		return nil
 	}
 }
@@ -72,12 +71,11 @@ func testAccCheckSlbDomainExtensionDestroy(s *terraform.State) error {
 			continue
 		}
 		loadBalancerId := rs.Primary.Attributes["load_balancer_id"]
-		port,err := strconv.Atoi(rs.Primary.Attributes["frontend_port"])
+		port, err := strconv.Atoi(rs.Primary.Attributes["frontend_port"])
 		if err != nil {
 			return err
 		}
-		// Try to find the Slb server group
-		if _, err := slbService.DescribeDomainExtensionAttribute(loadBalancerId,port,rs.Primary.ID); err != nil {
+		if _, err := slbService.DescribeDomainExtensionAttribute(loadBalancerId, port, rs.Primary.ID); err != nil {
 			if NotFoundError(err) {
 				continue
 			}
@@ -85,11 +83,10 @@ func testAccCheckSlbDomainExtensionDestroy(s *terraform.State) error {
 		}
 		return fmt.Errorf("SLB DomainExtension %s still exist", rs.Primary.ID)
 	}
-
 	return nil
 }
 
-const testAccSlbDomainExtensionBasic =`
+const testAccSlbDomainExtensionBasic = `
 resource "alicloud_slb" "instance" {
   name                 = "tffTestDomainExtension"
   internet_charge_type = "PayByTraffic"
@@ -123,7 +120,7 @@ resource "alicloud_slb_listener" "https" {
   ssl_certificate_id        = "${alicloud_slb_server_certificate.foo.id}"
 }
 
-resource "alicloud_slb_domain_extension" "example" {
+resource "alicloud_slb_domain_extension" "example1" {
   load_balancer_id      = "${alicloud_slb.instance.id}"
   frontend_port         = "${alicloud_slb_listener.https.frontend_port}"
   domain                = "www.test.com"

@@ -1,6 +1,7 @@
 package alicloud
 
 import (
+	"fmt"
 	"github.com/aliyun/alibaba-cloud-sdk-go/sdk/requests"
 	"github.com/aliyun/alibaba-cloud-sdk-go/services/slb"
 	"github.com/hashicorp/terraform/helper/resource"
@@ -53,19 +54,25 @@ func resourceAliyunSlbDomainExtensionCreate(d *schema.ResourceData, meta interfa
 	req.ListenerPort = requests.NewInteger(port)
 	req.Domain = d.Get("domain").(string)
 	req.ServerCertificateId = d.Get("server_certificate_id").(string)
-
-	raw, err := client.WithSlbClient(func(slbClient *slb.Client) (interface{}, error) {
-		return slbClient.CreateDomainExtension(req)
+	err := resource.Retry(3*time.Minute, func() *resource.RetryError {
+		raw, err := client.WithSlbClient(func(slbClient *slb.Client) (interface{}, error) {
+			return slbClient.CreateDomainExtension(req)
+		})
+		if err != nil {
+			if IsExceptedErrors(err, []string{BackendServerConfiguring, DomainExtensionProcessing}) {
+				return resource.RetryableError(WrapErrorf(err, DefaultErrorMsg, "slb_domain_extension", req.GetActionName(), AlibabaCloudSdkGoERROR))
+			}
+			return resource.NonRetryableError(fmt.Errorf("CreateDomainExtension got an error: %#v", err))
+		}
+		resp := raw.(*slb.CreateDomainExtensionResponse)
+		d.SetId(resp.DomainExtensionId)
+		addDebug(req.GetActionName(), raw)
+		return nil
 	})
 	if err != nil {
-		if err != nil {
-			return WrapErrorf(err, DefaultErrorMsg, "slb_domain_extension", req.GetActionName(), AlibabaCloudSdkGoERROR)
-		}
+		return err
 	}
-	addDebug(req.GetActionName(), err)
-	response, _ := raw.(*slb.CreateDomainExtensionResponse)
-	d.SetId(response.DomainExtensionId)
-	return resourceAliyunSlbDomainExtensionUpdate(d, meta)
+	return resourceAliyunSlbDomainExtensionRead(d, meta)
 }
 
 func resourceAliyunSlbDomainExtensionRead(d *schema.ResourceData, meta interface{}) error {
@@ -75,7 +82,6 @@ func resourceAliyunSlbDomainExtensionRead(d *schema.ResourceData, meta interface
 	port := d.Get("frontend_port").(int)
 	id := d.Id()
 	domainExtension, err := slbService.DescribeDomainExtensionAttribute(loadBalancerId, port, id)
-
 	if err != nil {
 		if NotFoundError(err) {
 			d.SetId("")
@@ -98,13 +104,22 @@ func resourceAliyunSlbDomainExtensionUpdate(d *schema.ResourceData, meta interfa
 		req.DomainExtensionId = d.Id()
 		req.ServerCertificateId = d.Get("server_certificate_id").(string)
 		client := meta.(*connectivity.AliyunClient)
-		raw, err := client.WithSlbClient(func(slbClient *slb.Client) (interface{}, error) {
-			return slbClient.SetDomainExtensionAttribute(req)
+		err := resource.Retry(3*time.Minute, func() *resource.RetryError {
+			raw, err := client.WithSlbClient(func(slbClient *slb.Client) (interface{}, error) {
+				return slbClient.SetDomainExtensionAttribute(req)
+			})
+			if err != nil {
+				if IsExceptedErrors(err, []string{BackendServerConfiguring, DomainExtensionProcessing}) {
+					return resource.RetryableError(WrapErrorf(err, DefaultErrorMsg, "slb_domain_extension", req.GetActionName(), AlibabaCloudSdkGoERROR))
+				}
+				return resource.NonRetryableError(fmt.Errorf("CreateDomainExtension got an error: %#v", err))
+			}
+			addDebug(req.GetActionName(), raw)
+			return nil
 		})
 		if err != nil {
-			return WrapErrorf(err, DefaultErrorMsg, d.Id(), req.GetActionName(), AlibabaCloudSdkGoERROR)
+			return err
 		}
-		addDebug(req.GetActionName(), raw)
 		d.SetPartial("server_certificate_id")
 	}
 	d.Partial(false)
@@ -120,7 +135,10 @@ func resourceAliyunSlbDomainExtensionDelete(d *schema.ResourceData, meta interfa
 			return slbClient.DeleteDomainExtension(req)
 		})
 		if err != nil {
-			if IsExceptedErrors(err, []string{""}) {
+			if IsExceptedErrors(err, []string{BackendServerConfiguring, DomainExtensionProcessing}) {
+				return resource.RetryableError(WrapErrorf(err, DefaultErrorMsg, "slb_domain_extension", req.GetActionName(), AlibabaCloudSdkGoERROR))
+			}
+			if IsExceptedError(err, InvalidDomainExtensionIdNotFound) {
 				return nil
 			}
 			return resource.NonRetryableError(WrapErrorf(err, DefaultErrorMsg, d.Id(), req.GetActionName(), AlibabaCloudSdkGoERROR))
