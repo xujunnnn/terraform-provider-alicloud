@@ -118,7 +118,7 @@ func expandBackendServersWithPortToString(items []interface{}) string {
 
 		var server_ids []interface{}
 		var port, weight int
-		var server_type string
+		var server_type, server_id string
 		if v, ok := s["server_ids"]; ok {
 			server_ids = v.([]interface{})
 		}
@@ -130,6 +130,13 @@ func expandBackendServersWithPortToString(items []interface{}) string {
 		}
 		if v, ok := s["type"]; ok {
 			server_type = v.(string)
+		}
+		if v, ok := s["server_id"]; ok {
+			server_id = v.(string)
+		}
+		if server_id != "" {
+			str := fmt.Sprintf("{'ServerId':'%s','Port':'%d','Weight':'%d', 'Type': '%s'}", strings.Trim(server_id, " "), port, weight, strings.Trim(server_type, " "))
+			servers = append(servers, str)
 		}
 		for _, id := range server_ids {
 			str := fmt.Sprintf("{'ServerId':'%s','Port':'%d','Weight':'%d', 'Type': '%s'}", strings.Trim(id.(string), " "), port, weight, strings.Trim(server_type, " "))

@@ -169,7 +169,46 @@ func TestAccAlicloudSlbServerGroup_classic(t *testing.T) {
 		},
 	})
 }
+func TestAccAlicloudSlbServerGroup_backendServers(t *testing.T) {
+	var v *slb.DescribeVServerGroupAttributeResponse
+	resourceId := "alicloud_slb_server_group.default"
+	ra := resourceAttrInit(resourceId, nil)
+	rc := resourceCheckInit(resourceId, &v, func() interface{} {
+		return &SlbService{testAccProvider.Meta().(*connectivity.AliyunClient)}
+	})
+	rac := resourceAttrCheckInit(rc, ra)
 
+	testAccCheck := rac.resourceAttrMapUpdateSet()
+	resource.Test(t, resource.TestCase{
+		PreCheck: func() {
+		},
+
+		// module name
+		IDRefreshName: resourceId,
+		Providers:     testAccProviders,
+		CheckDestroy:  testAccCheckSlbServerGroupDestroy,
+		Steps: []resource.TestStep{
+			{
+				Config: testAccSlbServerGroup_backendServers,
+				Check: resource.ComposeTestCheckFunc(
+					testAccCheck(map[string]string{
+						"name":      "tf-testAccSlbServerGroupVpc",
+						"backend_servers.#": "2",
+					}),
+				),
+			},
+			{
+				Config: testAccSlbServerGroup_backendServers_update,
+				Check: resource.ComposeTestCheckFunc(
+					testAccCheck(map[string]string{
+						"name":      "tf-testAccSlbServerGroupVpc",
+						"backend_servers.#": "3",
+					}),
+				),
+			},
+		},
+	})
+}
 func testAccCheckSlbServerGroupDestroy(s *terraform.State) error {
 	client := testAccProvider.Meta().(*connectivity.AliyunClient)
 	slbService := SlbService{client}
@@ -654,7 +693,7 @@ data "alicloud_instance_types" "default" {
 	memory_size = 2
 }
 data "alicloud_images" "default" {
-        name_regex = "^ubuntu_14.*_64"
+    name_regex = "^ubuntu_14.*_64"
 	most_recent = true
 	owners = "system"
 }
@@ -703,5 +742,166 @@ resource "alicloud_slb_server_group" "default" {
       port = 80
       weight = 100
     }
+}
+`
+const testAccSlbServerGroup_backendServers = `
+variable "name" {
+	default = "tf-testAccSlbServerGroupVpc"
+}
+data "alicloud_zones" "default" {
+	available_disk_category= "cloud_efficiency"
+	available_resource_creation= "VSwitch"
+}
+data "alicloud_instance_types" "default" {
+ 	availability_zone = "${data.alicloud_zones.default.zones.0.id}"
+	eni_amount = 2
+}
+data "alicloud_images" "default" {
+        name_regex = "^ubuntu_14.*_64"
+	most_recent = true
+	owners = "system"
+}
+resource "alicloud_vpc" "default" {
+  name = "${var.name}"
+  cidr_block = "172.16.0.0/16"
+}
+resource "alicloud_vswitch" "default" {
+  vpc_id = "${alicloud_vpc.default.id}"
+  cidr_block = "172.16.0.0/16"
+  availability_zone = "${data.alicloud_zones.default.zones.0.id}"
+  name = "${var.name}"
+}
+resource "alicloud_security_group" "default" {
+  name = "${var.name}"
+  vpc_id = "${alicloud_vpc.default.id}"
+}
+resource "alicloud_network_interface" "default" {
+    count = 1
+    name = "${var.name}"
+    vswitch_id = "${alicloud_vswitch.default.id}"
+    security_groups = [ "${alicloud_security_group.default.id}" ]
+}
+
+resource "alicloud_network_interface_attachment" "default" {
+	count = 1
+    instance_id = "${alicloud_instance.default.0.id}"
+    network_interface_id = "${element(alicloud_network_interface.default.*.id, count.index)}"
+}
+resource "alicloud_instance" "default" {
+  image_id = "${data.alicloud_images.default.images.0.id}"
+  instance_type = "${data.alicloud_instance_types.default.instance_types.0.id}"
+  instance_name = "${var.name}"
+  count = "2"
+  security_groups = "${alicloud_security_group.default.*.id}"
+  internet_charge_type = "PayByTraffic"
+  internet_max_bandwidth_out = "10"
+  availability_zone = "${data.alicloud_zones.default.zones.0.id}"
+  instance_charge_type = "PostPaid"
+  system_disk_category = "cloud_efficiency"
+  vswitch_id = "${alicloud_vswitch.default.id}"
+}
+resource "alicloud_slb" "default" {
+  name = "${var.name}"
+  vswitch_id = "${alicloud_vswitch.default.id}"
+  specification  = "slb.s2.small"
+}
+resource "alicloud_slb_server_group" "default" {
+  load_balancer_id = "${alicloud_slb.default.id}"
+  name             = "${var.name}"
+
+  backend_servers {
+    server_id = "${alicloud_instance.default.0.id}"
+    port       = 100
+    weight     = 10
+  }
+
+  backend_servers {
+     server_id = "${alicloud_instance.default.1.id}"
+     port       = 10
+     weight     = 10
+   }
+}
+`
+const testAccSlbServerGroup_backendServers_update = `
+variable "name" {
+	default = "tf-testAccSlbServerGroupVpc"
+}
+data "alicloud_zones" "default" {
+	available_disk_category= "cloud_efficiency"
+	available_resource_creation= "VSwitch"
+}
+data "alicloud_instance_types" "default" {
+ 	availability_zone = "${data.alicloud_zones.default.zones.0.id}"
+	eni_amount = 2
+}
+data "alicloud_images" "default" {
+        name_regex = "^ubuntu_14.*_64"
+	most_recent = true
+	owners = "system"
+}
+resource "alicloud_vpc" "default" {
+  name = "${var.name}"
+  cidr_block = "172.16.0.0/16"
+}
+resource "alicloud_vswitch" "default" {
+  vpc_id = "${alicloud_vpc.default.id}"
+  cidr_block = "172.16.0.0/16"
+  availability_zone = "${data.alicloud_zones.default.zones.0.id}"
+  name = "${var.name}"
+}
+resource "alicloud_security_group" "default" {
+  name = "${var.name}"
+  vpc_id = "${alicloud_vpc.default.id}"
+}
+resource "alicloud_network_interface" "default" {
+    count = 1
+    name = "${var.name}"
+    vswitch_id = "${alicloud_vswitch.default.id}"
+    security_groups = [ "${alicloud_security_group.default.id}" ]
+}
+
+resource "alicloud_network_interface_attachment" "default" {
+	count = 1
+    instance_id = "${alicloud_instance.default.0.id}"
+    network_interface_id = "${element(alicloud_network_interface.default.*.id, count.index)}"
+}
+resource "alicloud_instance" "default" {
+  image_id = "${data.alicloud_images.default.images.0.id}"
+  instance_type = "${data.alicloud_instance_types.default.instance_types.0.id}"
+  instance_name = "${var.name}"
+  count = "3"
+  security_groups = "${alicloud_security_group.default.*.id}"
+  internet_charge_type = "PayByTraffic"
+  internet_max_bandwidth_out = "10"
+  availability_zone = "${data.alicloud_zones.default.zones.0.id}"
+  instance_charge_type = "PostPaid"
+  system_disk_category = "cloud_efficiency"
+  vswitch_id = "${alicloud_vswitch.default.id}"
+}
+resource "alicloud_slb" "default" {
+  name = "${var.name}"
+  vswitch_id = "${alicloud_vswitch.default.id}"
+  specification  = "slb.s2.small"
+}
+resource "alicloud_slb_server_group" "default" {
+  load_balancer_id = "${alicloud_slb.default.id}"
+  name             = "${var.name}"
+
+  backend_servers {
+    server_id = "${alicloud_instance.default.0.id}"
+    port       = 100
+    weight     = 10
+  }
+
+  backend_servers {
+     server_id = "${alicloud_instance.default.1.id}"
+     port       = 10
+     weight     = 10
+   }
+  backend_servers {
+     server_id = "${alicloud_instance.default.2.id}"
+     port       = 10
+     weight     = 10
+   }
 }
 `

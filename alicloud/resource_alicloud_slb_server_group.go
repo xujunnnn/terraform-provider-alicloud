@@ -69,6 +69,36 @@ func resourceAliyunSlbServerGroup() *schema.Resource {
 				MaxItems: 20,
 				MinItems: 0,
 			},
+
+			"backend_servers": {
+				Type:     schema.TypeSet,
+				Optional: true,
+				Elem: &schema.Resource{
+					Schema: map[string]*schema.Schema{
+						"server_id": {
+							Type:     schema.TypeString,
+							Required: true,
+						},
+						"port": {
+							Type:         schema.TypeInt,
+							Required:     true,
+							ValidateFunc: validateIntegerInRange(1, 65535),
+						},
+						"weight": {
+							Type:         schema.TypeInt,
+							Optional:     true,
+							Default:      100,
+							ValidateFunc: validateIntegerInRange(0, 100),
+						},
+						"type": {
+							Type:         schema.TypeString,
+							Optional:     true,
+							Default:      string(ECS),
+							ValidateFunc: validateAllowedStringValue([]string{string(ENI), string(ECS)}),
+						},
+					},
+				},
+			},
 		},
 	}
 }
@@ -81,6 +111,9 @@ func resourceAliyunSlbServerGroupCreate(d *schema.ResourceData, meta interface{}
 		request.VServerGroupName = v.(string)
 	}
 	if v, ok := d.GetOk("servers"); ok {
+		request.BackendServers = expandBackendServersWithPortToString(v.(*schema.Set).List())
+	}
+	if v, ok := d.GetOk("backend_servers"); ok {
 		request.BackendServers = expandBackendServersWithPortToString(v.(*schema.Set).List())
 	}
 	raw, err := client.WithSlbClient(func(slbClient *slb.Client) (interface{}, error) {
@@ -100,7 +133,8 @@ func resourceAliyunSlbServerGroupRead(d *schema.ResourceData, meta interface{}) 
 	client := meta.(*connectivity.AliyunClient)
 	slbService := SlbService{client}
 	object, err := slbService.DescribeSlbServerGroup(d.Id())
-
+	old := false
+	new := false
 	if err != nil {
 		if NotFoundError(err) {
 			d.SetId("")
@@ -108,45 +142,65 @@ func resourceAliyunSlbServerGroupRead(d *schema.ResourceData, meta interface{}) 
 		}
 		return WrapError(err)
 	}
-
+	if v, ok := d.GetOk("servers"); ok && len(v.(*schema.Set).List()) > 0{
+		old = true
+	}
+	if v, ok := d.GetOk("backend_servers");ok && len(v.(*schema.Set).List()) > 0 {
+		new = true
+	}
 	d.Set("name", object.VServerGroupName)
 	d.Set("load_balancer_id", object.LoadBalancerId)
 
 	servers := make([]map[string]interface{}, 0)
-	portAndWeight := make(map[string][]string)
-	for _, server := range object.BackendServers.BackendServer {
-		key := fmt.Sprintf("%d%s%d%s%s", server.Port, COLON_SEPARATED, server.Weight, COLON_SEPARATED, server.Type)
-		if v, ok := portAndWeight[key]; !ok {
-			portAndWeight[key] = []string{server.ServerId}
-		} else {
-			v = append(v, server.ServerId)
-			portAndWeight[key] = v
+	if old {
+		portAndWeight := make(map[string][]string)
+		for _, server := range object.BackendServers.BackendServer {
+			key := fmt.Sprintf("%d%s%d%s%s", server.Port, COLON_SEPARATED, server.Weight, COLON_SEPARATED, server.Type)
+			if v, ok := portAndWeight[key]; !ok {
+				portAndWeight[key] = []string{server.ServerId}
+			} else {
+				v = append(v, server.ServerId)
+				portAndWeight[key] = v
+			}
 		}
-	}
-	for key, value := range portAndWeight {
-		k := strings.Split(key, COLON_SEPARATED)
-		p, e := strconv.Atoi(k[0])
-		if e != nil {
-			return WrapError(e)
+		for key, value := range portAndWeight {
+			k := strings.Split(key, COLON_SEPARATED)
+			p, e := strconv.Atoi(k[0])
+			if e != nil {
+				return WrapError(e)
+			}
+			w, e := strconv.Atoi(k[1])
+			if e != nil {
+				return WrapError(e)
+			}
+			t := k[2]
+			s := map[string]interface{}{
+				"server_ids": value,
+				"port":       p,
+				"weight":     w,
+				"type":       t,
+			}
+			servers = append(servers, s)
 		}
-		w, e := strconv.Atoi(k[1])
-		if e != nil {
-			return WrapError(e)
-		}
-		t := k[2]
-		s := map[string]interface{}{
-			"server_ids": value,
-			"port":       p,
-			"weight":     w,
-			"type":       t,
-		}
-		servers = append(servers, s)
-	}
 
-	if err := d.Set("servers", servers); err != nil {
-		return WrapError(err)
+		if err := d.Set("servers", servers); err != nil {
+			return WrapError(err)
+		}
 	}
-
+	if new {
+		for _, server := range object.BackendServers.BackendServer {
+			s := map[string]interface{}{
+				"server_id": server.ServerId,
+				"port":       server.Port,
+				"weight":     server.Weight,
+				"type":       server.Type,
+			}
+			servers = append(servers, s)
+		}
+		if err := d.Set("backend_servers", servers); err != nil {
+			return WrapError(err)
+		}
+	}
 	return nil
 }
 
@@ -200,12 +254,72 @@ func resourceAliyunSlbServerGroupUpdate(d *schema.ResourceData, meta interface{}
 
 		d.SetPartial("servers")
 	}
+	step := 20
+	if d.HasChange("backend_servers") {
+		o, n := d.GetChange("backend_servers")
+		os := o.(*schema.Set)
+		ns := n.(*schema.Set)
+		remove := os.Difference(ns).List()
+		add := ns.Difference(os).List()
+		fmt.Println(add)
+		fmt.Println(remove)
+		if len(remove) > 0 {
+			request := slb.CreateRemoveVServerGroupBackendServersRequest()
+			request.VServerGroupId = d.Id()
+			segs := len(remove)/step + 1
+			for i := 0; i < segs; i++ {
+				start := i * step
+				end := (i + 1) * step
+				if end >= len(remove) {
+					end = len(remove)
+				}
+				request.BackendServers = expandBackendServersWithPortToString(remove[start:end])
+				raw, err := client.WithSlbClient(func(slbClient *slb.Client) (interface{}, error) {
+					return slbClient.RemoveVServerGroupBackendServers(request)
+				})
+				if err != nil {
+					return WrapErrorf(err, DefaultErrorMsg, d.Id(), request.GetActionName(), AlibabaCloudSdkGoERROR)
+				}
+				addDebug(request.GetActionName(), raw)
+			}
+		}
+		if len(add) > 0 {
+			request := slb.CreateAddVServerGroupBackendServersRequest()
+			request.VServerGroupId = d.Id()
+			segs := len(add)/step + 1
+			for i := 0; i < segs; i++ {
+				start := i * step
+				end := (i + 1) * step
+				if end >= len(add) {
+					end = len(add)
+				}
+				request.BackendServers = expandBackendServersWithPortToString(add[start:end])
+				raw, err := client.WithSlbClient(func(slbClient *slb.Client) (interface{}, error) {
+					return slbClient.AddVServerGroupBackendServers(request)
+				})
+				if err != nil {
+					return WrapErrorf(err, DefaultErrorMsg, d.Id(), request.GetActionName(), AlibabaCloudSdkGoERROR)
+				}
+				addDebug(request.GetActionName(), raw)
+			}
+		}
+		if len(add) < 1 && len(remove) < 1 {
+			update = true
+		}
+
+		d.SetPartial("backend_servers")
+	}
 
 	if update {
 		request := slb.CreateSetVServerGroupAttributeRequest()
 		request.VServerGroupId = d.Id()
 		request.VServerGroupName = name
-		request.BackendServers = expandBackendServersWithPortToString(d.Get("servers").(*schema.Set).List())
+		if len(d.Get("servers").(*schema.Set).List()) > 0 {
+			request.BackendServers = expandBackendServersWithPortToString(d.Get("servers").(*schema.Set).List())
+		}
+		if len(d.Get("backend_servers").(*schema.Set).List()) > 0 {
+			request.BackendServers = expandBackendServersWithPortToString(d.Get("backend_servers").(*schema.Set).List())
+		}
 		raw, err := client.WithSlbClient(func(slbClient *slb.Client) (interface{}, error) {
 			return slbClient.SetVServerGroupAttribute(request)
 		})

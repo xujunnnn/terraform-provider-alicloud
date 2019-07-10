@@ -59,52 +59,23 @@ resource "alicloud_slb" "instance" {
   specification = "slb.s2.small"
 }
 
-resource "alicloud_network_interface" "default" {
-  count           = "${var.number}"
-  name            = "${var.name}"
-  vswitch_id      = "${alicloud_vswitch.main.id}"
-  security_groups = ["${alicloud_security_group.group.id}"]
-}
 
-resource "alicloud_network_interface_attachment" "default" {
-  count                = "${var.number}"
-  instance_id          = "${alicloud_instance.instance.0.id}"
-  network_interface_id = "${element(alicloud_network_interface.default.*.id, count.index)}"
-}
 
 resource "alicloud_slb_server_group" "group" {
   load_balancer_id = "${alicloud_slb.instance.id}"
   name             = "${var.name}"
 
-  servers {
-    server_ids = ["${alicloud_instance.instance.0.id}", "${alicloud_instance.instance.1.id}"]
+  backend_servers {
+    server_id = "${alicloud_instance.instance.0.id}"
     port       = 100
     weight     = 10
   }
 
-  servers {
-    server_ids = ["${alicloud_network_interface.default.0.id}"]
-    port       = 100
-    weight     = 10
-    type       = "eni"
-  }
+  backend_servers {
+     server_id = "${alicloud_instance.instance.1.id}"
+     port       = 10
+     weight     = 10
+   }
+
 }
 
-resource "alicloud_slb_listener" "tcp" {
-  load_balancer_id          = "${alicloud_slb.instance.id}"
-  backend_port              = "22"
-  frontend_port             = "22"
-  protocol                  = "tcp"
-  bandwidth                 = "10"
-  health_check_type         = "tcp"
-  persistence_timeout       = 3600
-  healthy_threshold         = 8
-  unhealthy_threshold       = 8
-  health_check_timeout      = 8
-  health_check_interval     = 5
-  health_check_http_code    = "http_2xx"
-  health_check_connect_port = 20
-  health_check_uri          = "/console"
-  established_timeout       = 600
-  server_group_id           = "${alicloud_slb_server_group.group.id}"
-}
