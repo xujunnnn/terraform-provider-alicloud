@@ -192,7 +192,7 @@ func TestAccAlicloudSlbServerGroup_backendServers(t *testing.T) {
 				Config: testAccSlbServerGroup_backendServers,
 				Check: resource.ComposeTestCheckFunc(
 					testAccCheck(map[string]string{
-						"name":      "tf-testAccSlbServerGroupVpc",
+						"name":              "tf-testAccSlbServerGroupVpc",
 						"backend_servers.#": "2",
 					}),
 				),
@@ -201,8 +201,9 @@ func TestAccAlicloudSlbServerGroup_backendServers(t *testing.T) {
 				Config: testAccSlbServerGroup_backendServers_update,
 				Check: resource.ComposeTestCheckFunc(
 					testAccCheck(map[string]string{
-						"name":      "tf-testAccSlbServerGroupVpc",
+						"name":              "tf-testAccSlbServerGroupVpc",
 						"backend_servers.#": "3",
+						"servers.#":         "1",
 					}),
 				),
 			},
@@ -869,7 +870,7 @@ resource "alicloud_instance" "default" {
   image_id = "${data.alicloud_images.default.images.0.id}"
   instance_type = "${data.alicloud_instance_types.default.instance_types.0.id}"
   instance_name = "${var.name}"
-  count = "3"
+  count = "5"
   security_groups = "${alicloud_security_group.default.*.id}"
   internet_charge_type = "PayByTraffic"
   internet_max_bandwidth_out = "10"
@@ -903,5 +904,10 @@ resource "alicloud_slb_server_group" "default" {
      port       = 10
      weight     = 10
    }
+servers {
+      server_ids = ["${alicloud_instance.default.3.id}", "${alicloud_instance.default.4.id}"]
+      port = 100
+      weight = 10
+    }
 }
 `

@@ -110,12 +110,6 @@ func resourceAliyunSlbServerGroupCreate(d *schema.ResourceData, meta interface{}
 	if v, ok := d.GetOk("name"); ok {
 		request.VServerGroupName = v.(string)
 	}
-	if v, ok := d.GetOk("servers"); ok {
-		request.BackendServers = expandBackendServersWithPortToString(v.(*schema.Set).List())
-	}
-	if v, ok := d.GetOk("backend_servers"); ok {
-		request.BackendServers = expandBackendServersWithPortToString(v.(*schema.Set).List())
-	}
 	raw, err := client.WithSlbClient(func(slbClient *slb.Client) (interface{}, error) {
 		return slbClient.CreateVServerGroup(request)
 	})
@@ -126,15 +120,14 @@ func resourceAliyunSlbServerGroupCreate(d *schema.ResourceData, meta interface{}
 	response, _ := raw.(*slb.CreateVServerGroupResponse)
 	d.SetId(response.VServerGroupId)
 
-	return resourceAliyunSlbServerGroupRead(d, meta)
+	return resourceAliyunSlbServerGroupUpdate(d, meta)
 }
 
 func resourceAliyunSlbServerGroupRead(d *schema.ResourceData, meta interface{}) error {
 	client := meta.(*connectivity.AliyunClient)
 	slbService := SlbService{client}
 	object, err := slbService.DescribeSlbServerGroup(d.Id())
-	old := false
-	new := false
+
 	if err != nil {
 		if NotFoundError(err) {
 			d.SetId("")
@@ -142,25 +135,46 @@ func resourceAliyunSlbServerGroupRead(d *schema.ResourceData, meta interface{}) 
 		}
 		return WrapError(err)
 	}
-	if v, ok := d.GetOk("servers"); ok && len(v.(*schema.Set).List()) > 0{
-		old = true
+	var server_Ids, backend_serverIds map[string]interface{}
+	if v, ok := d.GetOk("servers"); ok {
+		server_Ids = make(map[string]interface{})
+		servers := v.(*schema.Set).List()
+		for _, server := range servers {
+			ser := server.(map[string]interface{})
+			if v, ok := ser["server_ids"]; ok {
+				sids := v.([]interface{})
+				for _, id := range sids {
+					server_Ids[id.(string)] = ""
+				}
+			}
+		}
 	}
-	if v, ok := d.GetOk("backend_servers");ok && len(v.(*schema.Set).List()) > 0 {
-		new = true
+	if v, ok := d.GetOk("backend_servers"); ok {
+		backend_serverIds = make(map[string]interface{})
+		backendServers := v.(*schema.Set).List()
+		for _, backendServer := range backendServers {
+			bsr := backendServer.(map[string]interface{})
+			if v, ok := bsr["server_id"]; ok {
+				backend_serverIds[v.(string)] = ""
+			}
+		}
 	}
 	d.Set("name", object.VServerGroupName)
 	d.Set("load_balancer_id", object.LoadBalancerId)
 
 	servers := make([]map[string]interface{}, 0)
-	if old {
+	backend_servers := make([]map[string]interface{}, 0)
+	if len(server_Ids) > 0 {
 		portAndWeight := make(map[string][]string)
 		for _, server := range object.BackendServers.BackendServer {
-			key := fmt.Sprintf("%d%s%d%s%s", server.Port, COLON_SEPARATED, server.Weight, COLON_SEPARATED, server.Type)
-			if v, ok := portAndWeight[key]; !ok {
-				portAndWeight[key] = []string{server.ServerId}
-			} else {
-				v = append(v, server.ServerId)
-				portAndWeight[key] = v
+			if _, ok := server_Ids[server.ServerId]; ok {
+				key := fmt.Sprintf("%d%s%d%s%s", server.Port, COLON_SEPARATED, server.Weight, COLON_SEPARATED, server.Type)
+				if v, ok := portAndWeight[key]; !ok {
+					portAndWeight[key] = []string{server.ServerId}
+				} else {
+					v = append(v, server.ServerId)
+					portAndWeight[key] = v
+				}
 			}
 		}
 		for key, value := range portAndWeight {
@@ -182,22 +196,23 @@ func resourceAliyunSlbServerGroupRead(d *schema.ResourceData, meta interface{}) 
 			}
 			servers = append(servers, s)
 		}
-
 		if err := d.Set("servers", servers); err != nil {
 			return WrapError(err)
 		}
 	}
-	if new {
+	if len(backend_serverIds) > 0 {
 		for _, server := range object.BackendServers.BackendServer {
-			s := map[string]interface{}{
-				"server_id": server.ServerId,
-				"port":       server.Port,
-				"weight":     server.Weight,
-				"type":       server.Type,
+			if _, ok := backend_serverIds[server.ServerId]; ok {
+				s := map[string]interface{}{
+					"server_id": server.ServerId,
+					"port":      server.Port,
+					"weight":    server.Weight,
+					"type":      server.Type,
+				}
+				backend_servers = append(backend_servers, s)
 			}
-			servers = append(servers, s)
 		}
-		if err := d.Set("backend_servers", servers); err != nil {
+		if err := d.Set("backend_servers", backend_servers); err != nil {
 			return WrapError(err)
 		}
 	}
@@ -261,8 +276,6 @@ func resourceAliyunSlbServerGroupUpdate(d *schema.ResourceData, meta interface{}
 		ns := n.(*schema.Set)
 		remove := os.Difference(ns).List()
 		add := ns.Difference(os).List()
-		fmt.Println(add)
-		fmt.Println(remove)
 		if len(remove) > 0 {
 			request := slb.CreateRemoveVServerGroupBackendServersRequest()
 			request.VServerGroupId = d.Id()
@@ -306,7 +319,6 @@ func resourceAliyunSlbServerGroupUpdate(d *schema.ResourceData, meta interface{}
 		if len(add) < 1 && len(remove) < 1 {
 			update = true
 		}
-
 		d.SetPartial("backend_servers")
 	}
 

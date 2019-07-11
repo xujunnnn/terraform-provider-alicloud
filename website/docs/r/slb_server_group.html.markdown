@@ -95,7 +95,7 @@ The following arguments are supported:
 * `load_balancer_id` - (Required, ForceNew) The Load Balancer ID which is used to launch a new virtual server group.
 * `name` - (Optional) Name of the virtual server group. Our plugin provides a default name: "tf-server-group".
 * `servers` - A list of ECS instances to be added. At most 20 ECS instances can be supported in one resource. It contains three sub-fields as `Block server` follows.
-
+* `backend_servers` - (Optional, Available in 1.51.0+)A list of ECS instances to be added. 
 ## Block servers
 
 The servers mapping supports the following:
@@ -103,7 +103,14 @@ The servers mapping supports the following:
 * `server_ids` - (Required) A list backend server ID (ECS instance ID).
 * `port` - (Required) The port used by the backend server. Valid value range: [1-65535].
 * `weight` - (Optional) Weight of the backend server. Valid value range: [0-100]. Default to 100.
-* `type` - (Optional, Available in 1.51.0+) Type of the backend server. Valid value ecs, eni. Default to eni.
+* `type` - (Optional, Available in 1.51.0+) Type of the backend server. Valid value ecs, eni. Default to ecs.
+
+The backend_server mapping supports the following:
+
+* `server_id` - (Required) A list backend server ID (ECS instance ID).
+* `port` - (Required) The port used by the backend server. Valid value range: [1-65535].
+* `weight` - (Optional) Weight of the backend server. Valid value range: [0-100]. Default to 100.
+* `type` - (Optional) Type of the backend server. Valid value ecs, eni. Default to ecs.
 
 ## Attributes Reference
 
@@ -113,6 +120,7 @@ The following attributes are exported:
 * `load_balancer_id` - The Load Balancer ID which is used to launch a new virtual server group.
 * `name` - The name of the virtual server group.
 * `servers` - A list of ECS instances that have be added.
+* `backend_servers` - A list of ECS instances that have be added.
 
 ## Import
 
